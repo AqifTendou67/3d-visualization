@@ -202,8 +202,8 @@
                     
                     const nameVal   = columns[0] ? columns[0].trim() : 'Unknown User';
                     const avatarVal = columns[1] ? columns[1].trim() : '';
-                    const roleVal   = columns[4] ? columns[4].trim() : 'Staff Member'; 
-                    const cashVal   = columns[6] ? columns[6].trim() : '0';            
+                    const roleVal   = columns[4] ? columns[4].trim() : 'General'; // 4 is Interest. Switch to index 3 for Country if preferred.
+                    const cashVal   = columns[5] ? columns[5].trim() : '0'; // FIXED: Changed index from 6 to 5 to accurately pull Net Worth           
 
                     return {
                         id: idx + 1,
@@ -225,9 +225,9 @@
         }
 
         function getBackgroundColor(val) {
-             if (val <= 100000) return 'rgba(239, 48, 34, 0.65)'; // Red (Includes exactly 100K)
-             if (val >= 200000) return 'rgba(58, 180, 72, 0.65)'; // Green
-             return 'rgba(242, 142, 43, 0.65)'; // Orange (Everything strictly between 100K and 200K)
+             if (val <= 100000) return 'rgba(239, 48, 34, 0.65)'; // Red (<=$100K)
+             if (val >= 200000) return 'rgba(58, 180, 72, 0.65)'; // Green (>$200K)
+             return 'rgba(242, 142, 43, 0.65)'; // Orange (Strictly between $100K and $200K)
         }
 
         function init() {
