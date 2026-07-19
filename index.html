@@ -225,9 +225,9 @@
         }
 
         function getBackgroundColor(val) {
-            if (val < 100000) return 'rgba(239, 48, 34, 0.65)';
-            if (val >= 200000) return 'rgba(58, 180, 72, 0.65)';
-            return 'rgba(242, 142, 43, 0.65)';
+             if (val <= 100000) return 'rgba(239, 48, 34, 0.65)'; // Red (Includes exactly 100K)
+             if (val >= 200000) return 'rgba(58, 180, 72, 0.65)'; // Green
+             return 'rgba(242, 142, 43, 0.65)'; // Orange (Everything strictly between 100K and 200K)
         }
 
         function init() {
