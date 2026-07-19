@@ -182,17 +182,10 @@
                     throw new Error("No data rows found below the headers.");
                 }
 
+                // Advanced regex parser to make sure columns containing commas (like "$150,000") don't get broken apart
                 function parseCSVRow(text) {
-                    let p = '', r = [];
-                    let q = false;
-                    for (let i = 0; i < text.length; i++) {
-                        let c = text[i];
-                        if (c === '"') { q = !q; }
-                        else if (c === ',' && !q) { r.push(p); p = ''; }
-                        else { p += c; }
-                    }
-                    r.push(p);
-                    return r;
+                    let matches = text.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || text.split(',');
+                    return matches.map(val => val.replace(/^"|"$/g, '').trim());
                 }
 
                 const dataRows = lines.slice(1);
@@ -200,17 +193,33 @@
                 sheetData = dataRows.map((line, idx) => {
                     const columns = parseCSVRow(line);
                     
+                    // Added a debugger line. Open F12 in your browser to check the parsed array format.
+                    if (idx === 0) console.log("Debug: First parsed data row array layout:", columns);
+                    
                     const nameVal   = columns[0] ? columns[0].trim() : 'Unknown User';
                     const avatarVal = columns[1] ? columns[1].trim() : '';
-                    const roleVal   = columns[4] ? columns[4].trim() : 'General'; // 4 is Interest. Switch to index 3 for Country if preferred.
-                    const cashVal   = columns[5] ? columns[5].trim() : '0'; // FIXED: Changed index from 6 to 5 to accurately pull Net Worth           
+                    const roleVal   = columns[4] ? columns[4].trim() : 'General'; 
+                    const cashVal   = columns[5] ? columns[5].trim() : '0';          
+
+                    // Robust number sanitization: strip $, commas, and spaces
+                    let cleanText = cashVal.replace(/[\$, ]/g, '').toLowerCase();
+                    let finalNetworth = 0;
+
+                    // Support text suffixes if present ($100k, $2.5m)
+                    if (cleanText.includes('k')) {
+                        finalNetworth = parseFloat(cleanText.replace('k', '')) * 1000;
+                    } else if (cleanText.includes('m')) {
+                        finalNetworth = parseFloat(cleanText.replace('m', '')) * 1000000;
+                    } else {
+                        finalNetworth = parseFloat(cleanText) || 0;
+                    }
 
                     return {
                         id: idx + 1,
                         avatar: avatarVal.startsWith('http') ? avatarVal : `https://ui-avatars.com/api/?name=${encodeURIComponent(nameVal)}&background=87CEEB&color=fff`,
                         name: nameVal,
                         role: roleVal,
-                        networth: parseFloat(cashVal.replace(/[^0-9.-]+/g, "")) || 0
+                        networth: finalNetworth
                     };
                 });
 
@@ -226,7 +235,7 @@
 
         function getBackgroundColor(val) {
              if (val <= 100000) return 'rgba(239, 48, 34, 0.65)'; // Red (<=$100K)
-             if (val >= 200000) return 'rgba(58, 180, 72, 0.65)'; // Green (>$200K)
+             if (val >= 200000) return 'rgba(58, 180, 72, 0.65)'; // Green (>= $200K)
              return 'rgba(242, 142, 43, 0.65)'; // Orange (Strictly between $100K and $200K)
         }
 
