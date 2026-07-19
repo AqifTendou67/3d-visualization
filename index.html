@@ -15,7 +15,6 @@
             background-color: #000;
         }
 
-        /* Image A */
         #auth-container {
             display: flex;
             justify-content: center;
@@ -34,11 +33,13 @@
             text-align: center;
             max-width: 400px;
             width: 90%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
         .auth-card h1 { font-size: 24px; margin-bottom: 10px; color: #333; }
         .auth-card p { font-size: 14px; color: #666; margin-bottom: 30px; }
 
-        /* Main App */
         #app-container {
             display: none;
             width: 100%;
@@ -46,7 +47,6 @@
             position: relative;
         }
 
-        /* Image B */
         .element {
             width: 120px;
             height: 160px;
@@ -72,6 +72,7 @@
             border: 2px solid rgba(255,255,255,0.8);
             object-fit: cover;
             margin-top: 8px;
+            background-color: #555;
         }
         .element .name {
             font-size: 11px;
@@ -89,7 +90,6 @@
             margin-bottom: 8px;
         }
 
-        /* Navigation Bar */
         #menu {
             position: absolute;
             bottom: 20px;
@@ -115,10 +115,9 @@
         }
     </style>
 
-    
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     
-    <!-- Three.js Visual -->
+    <!-- Three.js Visual Engine Dependencies -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/renderers/CSS3DRenderer.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TrackballControls.js"></script>
@@ -130,9 +129,9 @@
     <div id="auth-container">
         <div class="auth-card">
             <h1>Welcome Back</h1>
-            <p>Sign in using to explore the dataset visualization.</p>
+            <p>Sign in to explore the dataset visualization.</p>
             <div id="g_id_onload"
-                 data-client_id="YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
+                 data-client_id="417538978541-05gf91muf6le644dijesih6b6pdcgou3.apps.googleusercontent.com"
                  data-context="signin"
                  data-ux_mode="popup"
                  data-callback="handleCredentialResponse"
@@ -142,7 +141,7 @@
         </div>
     </div>
 
-    
+    <!-- Visualization Display Viewport -->
     <div id="app-container">
         <div id="container"></div>
         <div id="menu">
@@ -153,63 +152,81 @@
         </div>
     </div>
 
-    <!-- Google API -->
     <script>
         const SPREADSHEET_ID = '1-BHzAxpwBBI57sb6Fu-yYs2FGTFkoakwFm5Sbbbrdps';
         const API_KEY = 'AIzaSyBpfaROLxz_0UqYzFRasv6naOZLPZTglk4'; 
         let sheetData = [];
 
-        // Engine Essentials
         let camera, scene, renderer, controls;
         const objects = [];
         const targets = { table: [], sphere: [], helix: [], grid: [] };
 
-        // Handle successful login
         function handleCredentialResponse(response) {
             document.getElementById('auth-container').style.display = 'none';
             document.getElementById('app-container').style.display = 'block';
             fetchSheetData();
         }
 
-        // Connect to Google Sheets and map payload
         async function fetchSheetData() {
-            // Collecting 200 items to neatly fill out the 20x10 and 5x4x10 spaces
-            const range = 'Sheet1!A2:E201'; 
-            const url = `https://sheets.googleapis.com/v1/spreadsheets/${SPREADSHEET_ID}/values/${range}?key=${API_KEY}`;
+            const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv&gid=0`;
             
             try {
                 const res = await fetch(url);
-                const data = await res.json();
+                if (!res.ok) throw new Error("Network response was not ok");
                 
-                if (!data.values || data.values.length === 0) {
-                    throw new Error("No data returned from the spreadsheet range.");
+                const csvText = await res.text();
+                const lines = csvText.split(/\r?\n/).filter(line => line.trim() !== "");
+                
+                if (lines.length <= 1) {
+                    throw new Error("No data rows found below the headers.");
                 }
 
-                sheetData = data.values.map((row, idx) => {
+                function parseCSVRow(text) {
+                    let p = '', r = [];
+                    let q = false;
+                    for (let i = 0; i < text.length; i++) {
+                        let c = text[i];
+                        if (c === '"') { q = !q; }
+                        else if (c === ',' && !q) { r.push(p); p = ''; }
+                        else { p += c; }
+                    }
+                    r.push(p);
+                    return r;
+                }
+
+                const dataRows = lines.slice(1);
+                
+                sheetData = dataRows.map((line, idx) => {
+                    const columns = parseCSVRow(line);
                     
+                    const nameVal   = columns[0] ? columns[0].trim() : 'Unknown User';
+                    const avatarVal = columns[1] ? columns[1].trim() : '';
+                    const roleVal   = columns[4] ? columns[4].trim() : 'Staff Member'; 
+                    const cashVal   = columns[6] ? columns[6].trim() : '0';            
+
                     return {
                         id: idx + 1,
-                        avatar: row[0] || 'https://via.placeholder.com/65', // Dynamic Image Link (Col A)
-                        name: row[1] || 'Unknown User',                     // Name String (Col B)
-                        role: row[2] || 'Staff Member',                     // Subtitle text (Col C)
-                        // Converts formatted currency elements like "$250,000" into clean mathematical floats
-                        networth: parseFloat((row[3] || '0').replace(/[^0-9.-]+/g,"")) // Value Float (Col D)
+                        avatar: avatarVal.startsWith('http') ? avatarVal : `https://ui-avatars.com/api/?name=${encodeURIComponent(nameVal)}&background=87CEEB&color=fff`,
+                        name: nameVal,
+                        role: roleVal,
+                        networth: parseFloat(cashVal.replace(/[^0-9.-]+/g, "")) || 0
                     };
                 });
+
+                sheetData = sheetData.slice(0, 200);
                 
                 init();
                 animate();
             } catch (err) {
-                console.error("API Fetch Failure: ", err);
-                alert("Failed to grab sheet data. Double-check that 'lisa@kasatria.com' has access, your API key is accurate, and the tab is named Sheet1.");
+                console.error("CSV Fetch/Parse Failure: ", err);
+                alert("Failed to grab sheet data. Confirm your Google Sheet is set to 'Anyone with the link can view'.");
             }
         }
 
-        // Handle strict color logic based on target thresholds
         function getBackgroundColor(val) {
-            if (val < 100000) return 'rgba(239, 48, 34, 0.65)';     // Red < $100K[cite: 1]
-            if (val >= 200000) return 'rgba(58, 180, 72, 0.65)';    // Green > $200K[cite: 1]
-            return 'rgba(242, 142, 43, 0.65)';                       // Orange > $100K[cite: 1]
+            if (val < 100000) return 'rgba(239, 48, 34, 0.65)';
+            if (val >= 200000) return 'rgba(58, 180, 72, 0.65)';
+            return 'rgba(242, 142, 43, 0.65)';
         }
 
         function init() {
@@ -218,7 +235,6 @@
 
             scene = new THREE.Scene();
 
-            // Transform parsed array items into DOM layouts mapped into 3D Space
             sheetData.forEach((data) => {
                 const element = document.createElement('div');
                 element.className = 'element';
@@ -228,6 +244,12 @@
 
                 const img = document.createElement('img');
                 img.src = data.avatar;
+                
+                img.onerror = function() {
+                    this.onerror = null;
+                    this.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name)}&background=333333&color=ffffff&size=65`;
+                };
+                
                 element.appendChild(img);
 
                 const name = document.createElement('div');
@@ -250,8 +272,8 @@
 
             const vector = new THREE.Vector3();
 
-            // 1. Layout: Strict Table Coordinates 
-            const tableCols = 20;[cite, 1]
+            // 1. Layout: Table Coordinates
+            const tableCols = 20; 
             objects.forEach((obj, i) => {
                 const col = i % tableCols;
                 const row = Math.floor(i / tableCols);
@@ -273,7 +295,7 @@
                 targets.sphere.push(target);
             });
 
-            // 3. Layout: Double Helix Coordinates 
+            // 3. Layout: Helix Coordinates
             objects.forEach((obj, i) => {
                 const target = new THREE.Object3D();
                 const strand = i % 2; 
@@ -287,39 +309,35 @@
                 targets.helix.push(target);
             });
 
-            // 4. Layout: Grid Dimensions 
-            const gridX = 5, gridY = 4;[cite, 1]
+            // 4. Layout: Grid Dimensions
+            const gridX = 5;
+            const gridY = 4;
             objects.forEach((obj, i) => {
                 const target = new THREE.Object3D();
                 const x = i % gridX;
                 const y = Math.floor((i % (gridX * gridY)) / gridX);
                 const z = Math.floor(i / (gridX * gridY));
                 
-                // Centering vectors cleanly around spatial zero-points
                 target.position.x = (x * 380) - 760;
                 target.position.y = - (y * 420) + 630;
                 target.position.z = - (z * 800) + 2000;
                 targets.grid.push(target);
             });
 
-            // Setup Renderer
             renderer = new THREE.CSS3DRenderer();
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.getElementById('container').appendChild(renderer.domElement);
 
-            // Trackball Navigation setup
             controls = new THREE.TrackballControls(camera, renderer.domElement);
             controls.minDistance = 500;
             controls.maxDistance = 6500;
             controls.addEventListener('change', render);
 
-            // Wire Navigation Actions
             setupTransformButton('table', targets.table, 2000);
             setupTransformButton('sphere', targets.sphere, 2000);
             setupTransformButton('helix', targets.helix, 2000);
             setupTransformButton('grid', targets.grid, 2000);
 
-            // Set initial layout state
             transform(targets.table, 2000);
             window.addEventListener('resize', onWindowResize);
         }
