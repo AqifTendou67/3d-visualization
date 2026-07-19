@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Data Visualization Assignment</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background-color: #000;
+        }
+
+        /* Image A */
+        #auth-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, #222 0%, #000 100%);
+            z-index: 10;
+        }
+        .auth-card {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+        }
+        .auth-card h1 { font-size: 24px; margin-bottom: 10px; color: #333; }
+        .auth-card p { font-size: 14px; color: #666; margin-bottom: 30px; }
+
+        /* Main App */
+        #app-container {
+            display: none;
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        /* Image B */
+        .element {
+            width: 120px;
+            height: 160px;
+            box-shadow: 0px 0px 12px rgba(0,255,255,0.5);
+            border: 1px solid rgba(127,255,255,0.25);
+            text-align: center;
+            cursor: default;
+            transition: box-shadow 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-around;
+            border-radius: 6px;
+        }
+        .element:hover {
+            box-shadow: 0px 0px 12px rgba(0,255,255,0.75);
+            border: 1px solid rgba(127,255,255,0.75);
+        }
+        .element img {
+            width: 65px;
+            height: 65px;
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.8);
+            object-fit: cover;
+            margin-top: 8px;
+        }
+        .element .name {
+            font-size: 11px;
+            font-weight: bold;
+            color: #fff;
+            padding: 0 5px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            width: 90%;
+        }
+        .element .role {
+            font-size: 9px;
+            color: rgba(255,255,255,0.75);
+            margin-bottom: 8px;
+        }
+
+        /* Navigation Bar */
+        #menu {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            z-index: 5;
+        }
+        button {
+            color: rgba(127,255,255,0.75);
+            background: transparent;
+            outline: 1px solid rgba(127,255,255,0.75);
+            border: 0px;
+            padding: 8px 15px;
+            cursor: pointer;
+            margin: 0 5px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            transition: all 0.2s ease;
+        }
+        button:hover {
+            background-color: rgba(0,255,255,0.2);
+            color: #fff;
+        }
+    </style>
+
+    
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    
+    <!-- Three.js Visual -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/renderers/CSS3DRenderer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TrackballControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+</head>
+<body>
+
+    <!-- First Screen -->
+    <div id="auth-container">
+        <div class="auth-card">
+            <h1>Welcome Back</h1>
+            <p>Sign in using to explore the dataset visualization.</p>
+            <div id="g_id_onload"
+                 data-client_id="YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
+                 data-context="signin"
+                 data-ux_mode="popup"
+                 data-callback="handleCredentialResponse"
+                 data-auto_prompt="false">
+            </div>
+            <div class="g_id_signin" data-type="standard"></div>
+        </div>
+    </div>
+
+    
+    <div id="app-container">
+        <div id="container"></div>
+        <div id="menu">
+            <button id="table">TABLE</button>
+            <button id="sphere">SPHERE</button>
+            <button id="helix">HELIX</button>
+            <button id="grid">GRID</button>
+        </div>
+    </div>
+
+    <!-- Google API -->
+    <script>
+        const SPREADSHEET_ID = '1-BHzAxpwBBI57sb6Fu-yYs2FGTFkoakwFm5Sbbbrdps';
+        const API_KEY = 'AIzaSyBpfaROLxz_0UqYzFRasv6naOZLPZTglk4'; 
+        let sheetData = [];
+
+        // Engine Essentials
+        let camera, scene, renderer, controls;
+        const objects = [];
+        const targets = { table: [], sphere: [], helix: [], grid: [] };
+
+        // Handle successful login
+        function handleCredentialResponse(response) {
+            document.getElementById('auth-container').style.display = 'none';
+            document.getElementById('app-container').style.display = 'block';
+            fetchSheetData();
+        }
+
+        // Connect to Google Sheets and map payload
+        async function fetchSheetData() {
+            // Collecting 200 items to neatly fill out the 20x10 and 5x4x10 spaces
+            const range = 'Sheet1!A2:E201'; 
+            const url = `https://sheets.googleapis.com/v1/spreadsheets/${SPREADSHEET_ID}/values/${range}?key=${API_KEY}`;
+            
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                
+                if (!data.values || data.values.length === 0) {
+                    throw new Error("No data returned from the spreadsheet range.");
+                }
+
+                sheetData = data.values.map((row, idx) => {
+                    
+                    return {
+                        id: idx + 1,
+                        avatar: row[0] || 'https://via.placeholder.com/65', // Dynamic Image Link (Col A)
+                        name: row[1] || 'Unknown User',                     // Name String (Col B)
+                        role: row[2] || 'Staff Member',                     // Subtitle text (Col C)
+                        // Converts formatted currency elements like "$250,000" into clean mathematical floats
+                        networth: parseFloat((row[3] || '0').replace(/[^0-9.-]+/g,"")) // Value Float (Col D)
+                    };
+                });
+                
+                init();
+                animate();
+            } catch (err) {
+                console.error("API Fetch Failure: ", err);
+                alert("Failed to grab sheet data. Double-check that 'lisa@kasatria.com' has access, your API key is accurate, and the tab is named Sheet1.");
+            }
+        }
+
+        // Handle strict color logic based on target thresholds
+        function getBackgroundColor(val) {
+            if (val < 100000) return 'rgba(239, 48, 34, 0.65)';     // Red < $100K[cite: 1]
+            if (val >= 200000) return 'rgba(58, 180, 72, 0.65)';    // Green > $200K[cite: 1]
+            return 'rgba(242, 142, 43, 0.65)';                       // Orange > $100K[cite: 1]
+        }
+
+        function init() {
+            camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 1, 10000);
+            camera.position.z = 3200;
+
+            scene = new THREE.Scene();
+
+            // Transform parsed array items into DOM layouts mapped into 3D Space
+            sheetData.forEach((data) => {
+                const element = document.createElement('div');
+                element.className = 'element';
+                const color = getBackgroundColor(data.networth);
+                element.style.backgroundColor = color;
+                element.style.border = `1px solid ${color.replace('0.65', '0.95')}`;
+
+                const img = document.createElement('img');
+                img.src = data.avatar;
+                element.appendChild(img);
+
+                const name = document.createElement('div');
+                name.className = 'name';
+                name.textContent = data.name;
+                element.appendChild(name);
+
+                const role = document.createElement('div');
+                role.className = 'role';
+                role.textContent = data.role;
+                element.appendChild(role);
+
+                const objectCSS = new THREE.CSS3DObject(element);
+                objectCSS.position.x = Math.random() * 4000 - 2000;
+                objectCSS.position.y = Math.random() * 4000 - 2000;
+                objectCSS.position.z = Math.random() * 4000 - 2000;
+                scene.add(objectCSS);
+                objects.push(objectCSS);
+            });
+
+            const vector = new THREE.Vector3();
+
+            // 1. Layout: Strict Table Coordinates 
+            const tableCols = 20;[cite, 1]
+            objects.forEach((obj, i) => {
+                const col = i % tableCols;
+                const row = Math.floor(i / tableCols);
+                const target = new THREE.Object3D();
+                target.position.x = (col * 160) - 1520;
+                target.position.y = - (row * 200) + 900;
+                target.position.z = 0;
+                targets.table.push(target);
+            });
+
+            // 2. Layout: Sphere Coordinates
+            objects.forEach((obj, i) => {
+                const phi = Math.acos(-1 + (2 * i) / objects.length);
+                const theta = Math.sqrt(objects.length * Math.PI) * phi;
+                const target = new THREE.Object3D();
+                target.position.setFromSphericalCoords(850, phi, theta);
+                vector.copy(target.position).multiplyScalar(2);
+                target.lookAt(vector);
+                targets.sphere.push(target);
+            });
+
+            // 3. Layout: Double Helix Coordinates 
+            objects.forEach((obj, i) => {
+                const target = new THREE.Object3D();
+                const strand = i % 2; 
+                const theta = (i * 0.16) + (strand * Math.PI); 
+                const y = - (i * 9) + 800;
+                target.position.setFromCylindricalCoords(950, theta, y);
+                vector.x = target.position.x * 2;
+                vector.y = target.position.y;
+                vector.z = target.position.z * 2;
+                target.lookAt(vector);
+                targets.helix.push(target);
+            });
+
+            // 4. Layout: Grid Dimensions 
+            const gridX = 5, gridY = 4;[cite, 1]
+            objects.forEach((obj, i) => {
+                const target = new THREE.Object3D();
+                const x = i % gridX;
+                const y = Math.floor((i % (gridX * gridY)) / gridX);
+                const z = Math.floor(i / (gridX * gridY));
+                
+                // Centering vectors cleanly around spatial zero-points
+                target.position.x = (x * 380) - 760;
+                target.position.y = - (y * 420) + 630;
+                target.position.z = - (z * 800) + 2000;
+                targets.grid.push(target);
+            });
+
+            // Setup Renderer
+            renderer = new THREE.CSS3DRenderer();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('container').appendChild(renderer.domElement);
+
+            // Trackball Navigation setup
+            controls = new THREE.TrackballControls(camera, renderer.domElement);
+            controls.minDistance = 500;
+            controls.maxDistance = 6500;
+            controls.addEventListener('change', render);
+
+            // Wire Navigation Actions
+            setupTransformButton('table', targets.table, 2000);
+            setupTransformButton('sphere', targets.sphere, 2000);
+            setupTransformButton('helix', targets.helix, 2000);
+            setupTransformButton('grid', targets.grid, 2000);
+
+            // Set initial layout state
+            transform(targets.table, 2000);
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function setupTransformButton(id, targetLayout, duration) {
+            document.getElementById(id).addEventListener('click', () => transform(targetLayout, duration));
+        }
+
+        function transform(targetLayout, duration) {
+            TWEEN.removeAll();
+            objects.forEach((obj, i) => {
+                const target = targetLayout[i];
+                if (!target) return;
+
+                new TWEEN.Tween(obj.position)
+                    .to({ x: target.position.x, y: target.position.y, z: target.position.z }, Math.random() * duration + duration / 2)
+                    .easing(TWEEN.Easing.Exponential.InOut)
+                    .start();
+
+                new TWEEN.Tween(obj.rotation)
+                    .to({ x: target.rotation.x, y: target.rotation.y, z: target.rotation.z }, Math.random() * duration + duration / 2)
+                    .easing(TWEEN.Easing.Exponential.InOut)
+                    .start();
+            });
+
+            new TWEEN.Tween(this)
+                .to({}, duration * 2)
+                .onUpdate(render)
+                .start();
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            render();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            TWEEN.update();
+            controls.update();
+        }
+
+        function render() {
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
