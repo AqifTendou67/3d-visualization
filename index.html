@@ -130,7 +130,6 @@
         <div class="auth-card">
             <h1>Welcome Back</h1>
             <p>Sign in to explore the dataset visualization.</p>
-            <!-- Google Client ID Updated Below -->
             <div id="g_id_onload"
                  data-client_id="417538978541-05gf91muf6le644dijesih6b6pdcgou3.apps.googleusercontent.com"
                  data-context="signin"
@@ -150,6 +149,7 @@
             <button id="sphere">SPHERE</button>
             <button id="helix">HELIX</button>
             <button id="grid">GRID</button>
+            <button id="pyramid">PYRAMID</button>
         </div>
     </div>
 
@@ -160,7 +160,7 @@
 
         let camera, scene, renderer, controls;
         const objects = [];
-        const targets = { table: [], sphere: [], helix: [], grid: [] };
+        const targets = { table: [], sphere: [], helix: [], grid: [], pyramid: [] };
 
         function handleCredentialResponse(response) {
             document.getElementById('auth-container').style.display = 'none';
@@ -182,7 +182,6 @@
                     throw new Error("No data rows found below the headers.");
                 }
 
-                // Advanced regex parser to make sure columns containing commas (like "$150,000") don't get broken apart
                 function parseCSVRow(text) {
                     let matches = text.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || text.split(',');
                     return matches.map(val => val.replace(/^"|"$/g, '').trim());
@@ -193,19 +192,14 @@
                 sheetData = dataRows.map((line, idx) => {
                     const columns = parseCSVRow(line);
                     
-                    // Added a debugger line. Open F12 in your browser to check the parsed array format.
-                    if (idx === 0) console.log("Debug: First parsed data row array layout:", columns);
-                    
                     const nameVal   = columns[0] ? columns[0].trim() : 'Unknown User';
                     const avatarVal = columns[1] ? columns[1].trim() : '';
                     const roleVal   = columns[4] ? columns[4].trim() : 'General'; 
                     const cashVal   = columns[5] ? columns[5].trim() : '0';          
 
-                    // Robust number sanitization: strip $, commas, and spaces
                     let cleanText = cashVal.replace(/[\$, ]/g, '').toLowerCase();
                     let finalNetworth = 0;
 
-                    // Support text suffixes if present ($100k, $2.5m)
                     if (cleanText.includes('k')) {
                         finalNetworth = parseFloat(cleanText.replace('k', '')) * 1000;
                     } else if (cleanText.includes('m')) {
@@ -334,6 +328,61 @@
                 targets.grid.push(target);
             });
 
+            // 5. Layout: Pyramid (Tetrahedron) Coordinates
+            const pyramidVertices = [
+                new THREE.Vector3(0, 1500, 0),                        // Top
+                new THREE.Vector3(0, -750, 1600),                     // Front Bottom
+                new THREE.Vector3(1385, -750, -800),                  // Right Back
+                new THREE.Vector3(-1385, -750, -800)                  // Left Back
+            ];
+
+            const pyramidFaces = [
+                [pyramidVertices[0], pyramidVertices[1], pyramidVertices[2]], // Front-Right Face
+                [pyramidVertices[0], pyramidVertices[2], pyramidVertices[3]], // Back Face
+                [pyramidVertices[0], pyramidVertices[3], pyramidVertices[1]], // Front-Left Face
+                [pyramidVertices[1], pyramidVertices[3], pyramidVertices[2]]  // Base Face
+            ];
+
+            const itemsPerFace = Math.ceil(objects.length / 4);
+            let maxRows = 1;
+            while ((maxRows * (maxRows + 1)) / 2 < itemsPerFace) {
+                maxRows++;
+            }
+
+            objects.forEach((obj, i) => {
+                const faceIdx = i % 4;
+                const faceItemIdx = Math.floor(i / 4);
+
+                let row = 0;
+                let count = 0;
+                while (count + (row + 1) <= faceItemIdx) {
+                    count += row + 1;
+                    row++;
+                }
+                const col = faceItemIdx - count;
+
+                const u = 1 - (row / Math.max(1, maxRows - 1));
+                const v = (row - col) / Math.max(1, maxRows - 1);
+                const w = col / Math.max(1, maxRows - 1);
+
+                const face = pyramidFaces[faceIdx];
+                const target = new THREE.Object3D();
+                
+                target.position.x = u * face[0].x + v * face[1].x + w * face[2].x;
+                target.position.y = u * face[0].y + v * face[1].y + w * face[2].y;
+                target.position.z = u * face[0].z + v * face[1].z + w * face[2].z;
+
+                // Compute normal vector to make elements face outward
+                const edge1 = new THREE.Vector3().subVectors(face[1], face[0]);
+                const edge2 = new THREE.Vector3().subVectors(face[2], face[0]);
+                const normal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();
+                
+                vector.copy(target.position).add(normal.multiplyScalar(1000));
+                target.lookAt(vector);
+
+                targets.pyramid.push(target);
+            });
+
             renderer = new THREE.CSS3DRenderer();
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.getElementById('container').appendChild(renderer.domElement);
@@ -347,6 +396,7 @@
             setupTransformButton('sphere', targets.sphere, 2000);
             setupTransformButton('helix', targets.helix, 2000);
             setupTransformButton('grid', targets.grid, 2000);
+            setupTransformButton('pyramid', targets.pyramid, 2000);
 
             transform(targets.table, 2000);
             window.addEventListener('resize', onWindowResize);
